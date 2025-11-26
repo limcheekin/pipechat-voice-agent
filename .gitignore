@@ -48,3 +48,30 @@ coverage
 .cache
 tmp
 temp
+
+# Python
+# Byte-compiled / optimized / C files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual Environments
+# Poetry typically creates the virtual env outside the project,
+# but this covers cases where it's created locally.
+.venv
+venv/
+env/
+
+# Pytest
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
