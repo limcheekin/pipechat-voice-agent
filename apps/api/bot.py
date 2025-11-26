@@ -52,8 +52,10 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAISTTService
 
 from custom_tts import CustomOpenAITTSService
+from tts_with_timing_processor import TTSWithTimingProcessor
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
+from pipecat.transports.services.livekit import LiveKitParams
 
 logger.info("✅ All components loaded successfully!")
 
@@ -77,6 +79,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice=os.getenv("TTS_VOICE"),
         language=os.getenv("LANGUAGE"),
     )
+    
+    # ✅ NEW: Wrap TTS with timing processor for lip-sync support
+    tts_with_timing = TTSWithTimingProcessor(tts_service=tts)
 
     llm = OpenAILLMService(
         api_key=os.getenv("LLM_API_KEY"),
@@ -87,7 +92,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     messages = [
         {
             "role": "system",
-            "content": "You are a friendly AI assistant. Respond naturally and keep your answers conversational.",
+            "content": "You are a friendly AI assistant with a 3D avatar. Respond naturally and keep your answers conversational.",
         },
     ]
 
@@ -103,7 +108,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             stt,
             context_aggregator.user(),  # User responses
             llm,  # LLM
-            tts,  # TTS
+            tts_with_timing,  # ✅ Use timing processor for lip-sync
             transport.output(),  # Transport bot output
             context_aggregator.assistant(),  # Assistant spoken responses
         ]
@@ -122,7 +127,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     async def on_client_connected(transport, client):
         logger.info(f"Client connected")
         # Kick off the conversation.
-        messages.append({"role": "system", "content": "Say hello and briefly introduce yourself."})
+        messages.append({"role": "system", "content": "Greet the user and introduce yourself as their AI assistant with an animated avatar."})
         await task.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_client_disconnected")
@@ -139,12 +144,23 @@ async def bot(runner_args: RunnerArguments):
     """Main bot entry point for the bot starter."""
 
     transport_params = {
+        # ✅ PRIMARY: LiveKit transport
+        "livekit": lambda: LiveKitParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            camera_in_enabled=False,  # Set to True for multimodal (vision)
+            camera_out_enabled=False,  # Set to True if bot outputs video
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            turn_analyzer=LocalSmartTurnAnalyzerV3(),
+        ),
+        # ALTERNATIVE: Daily.co transport
         "daily": lambda: DailyParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
             turn_analyzer=LocalSmartTurnAnalyzerV3(),
         ),
+        # ALTERNATIVE: Generic WebRTC transport
         "webrtc": lambda: TransportParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
