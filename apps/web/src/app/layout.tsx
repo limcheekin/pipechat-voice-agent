@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	title: "better-stack-project",
-	description: "better-stack-project",
+	title: "PipeChat Voice Agent",
+	description: "Real-time AI voice conversation application",
 };
 
 export default function RootLayout({
