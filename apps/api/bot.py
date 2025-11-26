@@ -55,7 +55,7 @@ from custom_tts import CustomOpenAITTSService
 from tts_with_timing_processor import TTSWithTimingProcessor
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
-from pipecat.transports.services.livekit import LiveKitParams
+from pipecat.transports.livekit.transport import LiveKitParams
 
 logger.info("✅ All components loaded successfully!")
 
@@ -175,6 +175,20 @@ async def bot(runner_args: RunnerArguments):
 
 
 if __name__ == "__main__":
-    from pipecat.runner.run import main
-
-    main()
+    import argparse
+    import asyncio
+    
+    parser = argparse.ArgumentParser(description="Pipecat Bot")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
+    parser.add_argument("--port", type=int, default=8765, help="Port number")
+    parser.add_argument("-t", "--transport", type=str, default="daily", choices=["daily", "webrtc", "livekit"], help="Transport type")
+    parser.add_argument("-u", "--url", type=str, help="LiveKit URL")
+    parser.add_argument("-k", "--api-key", type=str, help="LiveKit API Key")
+    parser.add_argument("-s", "--api-secret", type=str, help="LiveKit API Secret")
+    
+    args = parser.parse_args()
+    
+    # Add required attributes for PipelineRunner
+    setattr(args, "handle_sigint", True)
+    
+    asyncio.run(bot(args))

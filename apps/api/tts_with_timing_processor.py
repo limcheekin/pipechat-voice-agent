@@ -1,6 +1,6 @@
-from pipecat.frames.frames import Frame, TTSStartedFrame, TTSStoppedFrame, TextFrame, DataMessageFrame
+from pipecat.frames.frames import Frame, TTSStartedFrame, TTSStoppedFrame, TextFrame, OutputTransportMessageFrame
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
-from pipecat.services.openai import OpenAITTSService
+from pipecat.services.openai.tts import OpenAITTSService
 from typing import AsyncGenerator, List, Dict, Any
 import os
 import time
@@ -74,7 +74,7 @@ class TTSWithTimingProcessor(FrameProcessor):
                 logger.info(f"Emitting timing event: {len(timings)} words for text: '{frame.text[:50]}...'")
                 
                 # Send timing via LiveKit data channel
-                await self.push_frame(DataMessageFrame(data=timing_data))
+                await self.push_frame(OutputTransportMessageFrame(message=timing_data))
                 
                 # Push audio frames
                 for audio_frame in audio_frames:

@@ -1,6 +1,5 @@
 """Custom TTS Service for OpenAI-compatible endpoints with custom voices."""
 
-from pipecat.services.openai import tts as openai_tts_module
 from pipecat.services.openai.tts import OpenAITTSService, VALID_VOICES
 
 
@@ -14,8 +13,6 @@ def add_custom_voice(voice_id: str):
     if voice_id not in VALID_VOICES:
         # Map custom voice to itself (no transformation needed)
         VALID_VOICES[voice_id] = voice_id
-        # Also update the module-level VALID_VOICES
-        openai_tts_module.VALID_VOICES[voice_id] = voice_id
 
 
 class CustomOpenAITTSService(OpenAITTSService):
