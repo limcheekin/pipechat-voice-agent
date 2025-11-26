@@ -1,173 +1,355 @@
-# Pipecat Quickstart
+# PipeChat Voice Agent
 
-Build and deploy your first voice AI bot in under 10 minutes. Develop locally, then scale to production on Pipecat Cloud.
+A real-time AI voice agent application combining a **TypeScript Frontend** (Next.js) and a **Python Backend** (FastAPI + Pipecat), following the "Better T-Stack" philosophy with end-to-end type safety.
 
-**Two steps**: [🏠 Local Development](#run-your-bot-locally) → [☁️ Production Deployment](#deploy-to-production)
+Created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack).
 
-## Step 1: Local Development (5 min)
+## Overview
 
-### Prerequisites
+PipeChat Voice Agent is a production-ready voice AI application that enables real-time conversational interactions using:
+- **Pipecat AI** framework for voice agent orchestration
+- **Daily.co WebRTC** for real-time audio streaming
+- **OpenAI-compatible APIs** for LLM, Speech-to-Text (STT), and Text-to-Speech (TTS)
+- **End-to-end type safety** between frontend and backend via OpenAPI
 
-#### Environment
+## Features
 
-- Python 3.10 or later
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager installed
+- 🎙️ **Real-time Voice Conversations** - Low-latency voice interactions via WebRTC
+- 🤖 **AI-Powered Bot** - Built with Pipecat AI framework
+- 🔒 **Type Safety** - Full type safety across frontend and backend
+- 🚀 **Next.js 16.0.0** - Modern full-stack React framework
+- ⚡ **FastAPI** - High-performance Python backend
+- 🎨 **TailwindCSS 4.1.10** - Utility-first styling
+- 📡 **TanStack Query 5.85.5** - Powerful data fetching
+- 📦 **Turborepo** - Optimized monorepo build system
+- 🔧 **OpenAPI** - Automatic TypeScript client generation
 
-#### AI Service API keys
+## Prerequisites
 
-You'll need API keys from three services:
+Before you begin, ensure you have the following installed:
 
-- [Deepgram](https://console.deepgram.com/signup) for Speech-to-Text
-- [OpenAI](https://auth.openai.com/create-account) for LLM inference
-- [Cartesia](https://play.cartesia.ai/sign-up) for Text-to-Speech
+- **Node.js** 18+ and npm 11+
+- **Python** 3.10 or higher
+- **uv** - Fast Python package installer ([installation guide](https://github.com/astral-sh/uv))
+- **Daily.co account** (optional) - For WebRTC voice capabilities ([sign up](https://daily.co))
 
-> 💡 **Tip**: Sign up for all three now. You'll need them for both local and cloud deployment.
+## Project Structure
 
-### Setup
+```
+pipechat-voice-agent/
+├── apps/
+│   ├── api/                   # Python Backend (FastAPI)
+│   │   ├── main.py            # FastAPI entry point
+│   │   ├── bot.py             # Pipecat voice agent implementation
+│   │   ├── custom_tts.py      # Custom TTS processor
+│   │   ├── export_openapi_minimal.py
+│   │   ├── openapi.json       # Generated OpenAPI schema
+│   │   ├── env.example        # Environment variables template
+│   │   ├── pyproject.toml     # Python dependencies
+│   │   └── Dockerfile         # Container configuration
+│   └── web/                   # TypeScript Frontend (Next.js)
+│       ├── src/
+│       │   ├── app/
+│       │   │   └── page.tsx   # Main page
+│       │   ├── components/    # React components
+│       │   └── lib/
+│       │       └── api-client/ # Generated TypeScript client
+│       ├── .env.example       # Frontend environment template
+│       ├── openapi-ts.config.ts
+│       └── package.json
+├── docs/                      # Documentation
+├── packages/                  # Shared packages
+├── turbo.json                 # Turborepo configuration
+└── package.json               # Root package configuration
+```
 
-Navigate to the quickstart directory and set up your environment.
+## Getting Started
 
-1. Clone this repository
+### 1. Install Dependencies
 
-   ```bash
-   git clone https://github.com/pipecat-ai/pipecat-quickstart.git
-   cd pipecat-quickstart
-   ```
+#### Frontend Dependencies
+```bash
+npm install
+```
 
-2. Configure your API keys:
+#### Backend Dependencies
+```bash
+cd apps/api
+uv sync
+```
 
-   Create a `.env` file:
+> [!NOTE]
+> If `uv sync` fails due to disk space issues, free up space and try again. The command creates a virtual environment and installs all Python dependencies.
 
-   ```bash
-   cp env.example .env
-   ```
+### 2. Environment Configuration
 
-   Then, add your API keys:
+#### Backend Environment Setup
 
-   ```ini
-   DEEPGRAM_API_KEY=your_deepgram_api_key
-   OPENAI_API_KEY=your_openai_api_key
-   CARTESIA_API_KEY=your_cartesia_api_key
-   ```
-
-3. Set up a virtual environment and install dependencies
-
-   ```bash
-   uv sync
-   ```
-
-### Run your bot locally
+Copy the example environment file and configure your API keys:
 
 ```bash
+cd apps/api
+cp env.example .env
+```
+
+Edit `.env` with your configuration:
+
+```bash
+# LLM Configuration (OpenAI-compatible endpoint)
+LLM_BASE_URL="http://your-llm-server:8886/v1"
+LLM_MODEL="your-model-name"
+LLM_API_KEY="sk-your-api-key"
+
+# Speech-to-Text (STT) Configuration
+STT_BASE_URL="http://your-stt-server:8882/v1"
+STT_API_KEY="sk-your-api-key"
+STT_MODEL="small"
+STT_RESPONSE_FORMAT="verbose_json"
+LANGUAGE="en"
+
+# Text-to-Speech (TTS) Configuration
+TTS_BASE_URL="http://your-tts-server:8884/v1"
+TTS_API_KEY="your-api-key"
+TTS_MODEL="kokoro"
+TTS_VOICE="af_heart"
+TTS_BACKEND="kokoro"
+TTS_AUDIO_FORMAT="pcm"
+
+# Daily.co WebRTC (Optional for local testing)
+DAILY_API_KEY=your_daily_api_key
+```
+
+> [!IMPORTANT]
+> This application uses **OpenAI-compatible API endpoints** for LLM, STT, and TTS. You can use:
+> - OpenAI's official APIs
+> - Self-hosted models (e.g., vLLM, FastWhisper, etc.)
+> - Other OpenAI-compatible services
+
+#### Frontend Environment Setup
+
+```bash
+cd apps/web
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```bash
+NEXT_PUBLIC_SERVER_URL=http://localhost:8000
+```
+
+### 3. Start Development Servers
+
+#### Backend (FastAPI)
+```bash
+cd apps/api
+uvicorn main:app --reload --port 8000
+```
+
+The API will be available at:
+- **API Base**: `http://localhost:8000`
+- **API Docs**: `http://localhost:8000/docs`
+- **Health Check**: `http://localhost:8000/health`
+
+#### Frontend (Next.js)
+From the **root directory**:
+```bash
+npm run dev
+```
+
+The web app will be available at `http://localhost:3001`
+
+## Type-Safe API Integration
+
+This project uses OpenAPI to maintain end-to-end type safety between the Python backend and TypeScript frontend.
+
+### Workflow for Adding New Endpoints
+
+1. **Add endpoint to `apps/api/main.py`**
+   ```python
+   @app.get("/api/users")
+   async def get_users():
+       return [{"id": 1, "name": "Alice"}]
+   ```
+
+2. **Regenerate OpenAPI schema**
+   ```bash
+   cd apps/api
+   python3 export_openapi_minimal.py
+   ```
+
+3. **Regenerate TypeScript client**
+   ```bash
+   cd apps/web
+   npm run generate-client
+   ```
+
+4. **Use in frontend with full type safety**
+   ```typescript
+   import { client } from '@/lib/api-client';
+   
+   const { data } = useQuery({
+     queryKey: ['users'],
+     queryFn: async () => {
+       const response = await client.GET('/api/users');
+       return response.data; // Fully typed!
+     },
+   });
+   ```
+
+## Available Scripts
+
+### Root Level
+- `npm run dev` - Start all applications in development mode
+- `npm run build` - Build all applications
+- `npm run dev:web` - Start only the web application
+
+### Frontend (`apps/web`)
+- `npm run dev` - Start Next.js dev server (port 3001)
+- `npm run build` - Build for production
+- `npm run generate-client` - Generate TypeScript client from OpenAPI schema
+
+### Backend (`apps/api`)
+- `uvicorn main:app --reload --port 8000` - Start FastAPI dev server
+- `python3 export_openapi_minimal.py` - Generate OpenAPI schema
+
+## Pipecat Voice Agent Integration
+
+### Architecture
+
+The voice agent is built using:
+- **Pipecat AI**: Framework for building real-time voice agents
+- **Daily.co WebRTC**: Real-time audio transport layer
+- **RTVI Protocol**: Real-Time Voice and Video Inference standard
+
+### Current Implementation
+
+The `bot.py` file contains a fully functional Pipecat voice agent with:
+- OpenAI-compatible LLM integration
+- OpenAI-compatible STT (Speech-to-Text)
+- OpenAI-compatible TTS (Text-to-Speech)
+- Daily.co WebRTC transport
+- Custom TTS timing processor (`custom_tts.py`)
+
+### Running the Voice Bot
+
+To run the bot standalone (requires configured `.env` file):
+```bash
+cd apps/api
 uv run bot.py
 ```
 
-**Open http://localhost:7860 in your browser** and click `Connect` to start talking to your bot.
+The bot will create a Daily.co room or WebRTC connection that you can join from your browser.
 
-> 💡 First run note: The initial startup may take ~20 seconds as Pipecat downloads required models and imports.
+Future FastAPI integration will include:
 
-🎉 **Success!** Your bot is running locally. Now let's deploy it to production so others can use it.
+1. **FastAPI endpoints** for bot lifecycle management:
+   - `POST /api/bot/start` - Start a new bot session
+   - `POST /api/bot/stop` - Stop an active session
+   - `GET /api/bot/status` - Check bot status
 
----
+2. **Daily.co room management**:
+   - Create temporary Daily rooms for each session
+   - Manage WebRTC connections
+   - Handle bot join/leave events
 
-## Step 2: Deploy to Production (5 min)
+3. **Frontend integration**:
+   - Daily.co React components for audio streaming
+   - Real-time connection status
+   - Voice activity indicators
 
-Transform your local bot into a production-ready service. Pipecat Cloud handles scaling, monitoring, and global deployment.
+## Troubleshooting
 
-### Prerequisites
+### Common Issues
 
-1. [Sign up for Pipecat Cloud](https://pipecat.daily.co/sign-up).
-
-2. Set up Docker for building your bot image:
-
-   - **Install [Docker](https://www.docker.com/)** on your system
-   - **Create a [Docker Hub](https://hub.docker.com/) account**
-   - **Login to Docker Hub:**
-
-     ```bash
-     docker login
-     ```
-
-3. Install the Pipecat CLI
-
-   ```bash
-   uv tool install pipecat-ai-cli
-   ```
-
-   > Tip: You can run the `pipecat` CLI using the `pc` alias.
-
-### Configure your deployment
-
-The `pcc-deploy.toml` file tells Pipecat Cloud how to run your bot. **Update the image field** with your Docker Hub username by editing `pcc-deploy.toml`.
-
-```ini
-agent_name = "quickstart"
-image = "YOUR_DOCKERHUB_USERNAME/quickstart:0.1"  # 👈 Update this line
-secret_set = "quickstart-secrets"
-
-[scaling]
-	min_agents = 1
-```
-
-**Understanding the TOML file settings:**
-
-- `agent_name`: Your bot's name in Pipecat Cloud
-- `image`: The Docker image to deploy (format: `username/image:version`)
-- `secret_set`: Where your API keys are stored securely
-- `min_agents`: Number of bot instances to keep ready (1 = instant start)
-
-> 💡 Tip: [Set up `image_credentials`](https://docs.pipecat.ai/deployment/pipecat-cloud/fundamentals/secrets#image-pull-secrets) in your TOML file for authenticated image pulls
-
-### Log in to Pipecat Cloud
-
-To start using the CLI, authenticate to Pipecat Cloud:
-
+#### `uv sync` fails with disk space error
 ```bash
-pipecat cloud auth login
+# Check available disk space
+df -h
+
+# Clean up unnecessary files
+# Then retry: uv sync
 ```
 
-You'll be presented with a link that you can click to authenticate your client.
-
-### Configure secrets
-
-Upload your API keys to Pipecat Cloud's secure storage:
-
+#### Port already in use
 ```bash
-pipecat cloud secrets set quickstart-secrets --file .env
+# Backend (8000)
+lsof -ti:8000 | xargs kill -9
+
+# Frontend (3001)
+lsof -ti:3001 | xargs kill -9
 ```
 
-This creates a secret set called `quickstart-secrets` (matching your TOML file) and uploads all your API keys from `.env`.
+#### Missing API keys
+Ensure all required environment variables are set in `apps/api/.env`. The bot won't start without valid API keys.
 
-### Build and deploy
+#### CORS errors in frontend
+Check that `NEXT_PUBLIC_SERVER_URL` in `apps/web/.env` matches your backend URL.
 
-Build your Docker image and push to Docker Hub:
-
+#### TypeScript client out of sync
+Regenerate the client after backend changes:
 ```bash
-pipecat cloud docker build-push
+# From root directory
+cd apps/api
+python3 export_openapi_minimal.py
+cd ../web
+npm run generate-client
 ```
 
-Deploy to Pipecat Cloud:
+## Production Deployment
 
-```bash
-pipecat cloud deploy
-```
+> [!WARNING]
+> Before deploying to production, complete these critical steps:
 
-### Connect to your agent
+### Security
+- ✅ Update CORS configuration in `main.py` to specify allowed origins (currently set to `*`)
+- ✅ Use environment variables for all API keys (never commit them!)
+- ✅ Enable HTTPS for all endpoints
+- ✅ Implement authentication and authorization
 
-1. Open your [Pipecat Cloud dashboard](https://pipecat.daily.co/)
-2. Select your `quickstart` agent → **Sandbox**
-3. Allow microphone access and click **Connect**
+### Infrastructure
+- ✅ Set up a Daily.co production account
+- ✅ Configure rate limiting for API endpoints
+- ✅ Set up monitoring and logging
+- ✅ Use a production-grade ASGI server (e.g., Gunicorn with Uvicorn workers)
 
----
+### Environment Variables
+- ✅ Secure all API keys in your deployment platform's secret management
+- ✅ Configure production LLM/STT/TTS endpoints
+- ✅ Set up proper error tracking (e.g., Sentry)
 
-## What's Next?
+## Technology Stack
 
-**🔧 Customize your bot**: Modify `bot.py` to change personality, add functions, or integrate with your data  
-**📚 Learn more**: Check out [Pipecat's docs](https://docs.pipecat.ai/) for advanced features  
-**💬 Get help**: Join [Pipecat's Discord](https://discord.gg/pipecat) to connect with the community
+### Frontend
+- Next.js 16.0.0
+- React 19.2.0
+- TailwindCSS 4.1.10
+- TanStack Query 5.85.5
+- TypeScript 5
 
-### Troubleshooting
+### Backend
+- FastAPI 0.110.0+
+- Python 3.10+
+- Pipecat AI (supports OpenAI-compatible endpoints for LLM/STT/TTS)
+- uvicorn 0.27.0+ (ASGI server)
 
-- **Browser permissions**: Allow microphone access when prompted
-- **Connection issues**: Try a different browser or check VPN/firewall settings
-- **Audio issues**: Verify microphone and speakers are working and not muted
+### Type Safety
+- OpenAPI 3.1.0
+- @hey-api/openapi-ts 0.88.0
+- Automatic client generation
+
+### Infrastructure
+- Turborepo 2.5.4
+- uv (Python package manager)
+- Daily.co (WebRTC transport)
+
+## Contributing
+
+Contributions are welcome! Please ensure:
+1. Type safety is maintained across backend and frontend
+2. OpenAPI schema is regenerated after backend changes
+3. Tests pass before submitting PRs
+
+## License
+
+See [LICENSE](LICENSE) file for details.
