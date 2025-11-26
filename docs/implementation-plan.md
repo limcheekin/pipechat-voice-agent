@@ -335,16 +335,115 @@ async def bot(runner_args: RunnerArguments):
     await run_bot(transport, runner_args)
 ```
 
-**Rationale**: Maintains current bot.py structure while adding LiveKit support alongside existing Daily/WebRTC transports.
-
-**Usage**: Start bot with LiveKit by setting environment variables in `.env` and using:
-```bash
-uv run bot.py --transport livekit
 ```
+
+**Rationale**: Maintains current bot.py structure while adding LiveKit support alongside existing Daily/WebRTC transports.
 
 ---
 
-### Component 3: Frontend Application with LiveKit + RTVI Client
+### Component 3: Backend Server (Token Generation + Bot Runner)
+
+#### [NEW] [server.py](file:///media/limcheekin/My%20Passport/ws/py/pipechat-voice-agent/server.py)
+
+**Purpose**: Provides a Web API for the frontend to request LiveKit tokens, and manages the Pipecat bot process.
+
+```python
+import os
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from livekit import api
+from dotenv import load_dotenv
+import asyncio
+from contextlib import asynccontextmanager
+import logging
+
+# Load environment variables
+load_dotenv()
+
+logger = logging.getLogger("server")
+
+# Define request model
+class TokenRequest(BaseModel):
+    room: str
+    identity: str
+    name: str
+
+# Bot management (simplified for this example)
+# In a real app, you might spawn subprocesses or use a task queue
+bot_process = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Server starting...")
+    yield
+    # Shutdown
+    logger.info("Server shutting down...")
+
+app = FastAPI(lifespan=lifespan)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.post("/token")
+async def get_token(req: TokenRequest):
+    """Generate a LiveKit token for the frontend client."""
+    try:
+        api_key = os.getenv("LIVEKIT_API_KEY")
+        api_secret = os.getenv("LIVEKIT_API_SECRET")
+        livekit_url = os.getenv("LIVEKIT_URL")
+
+        if not all([api_key, api_secret, livekit_url]):
+            raise HTTPException(status_code=500, detail="LiveKit configuration missing")
+
+        # Create access token
+        token = api.AccessToken(api_key, api_secret) \
+            .with_identity(req.identity) \
+            .with_name(req.name) \
+            .with_grants(api.VideoGrants(
+                room_join=True,
+                room=req.room,
+            ))
+
+        return {
+            "token": token.to_jwt(),
+            "url": livekit_url
+        }
+    except Exception as e:
+        logger.error(f"Error generating token: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+if __name__ == "__main__":
+    # Run the server
+    # Note: The bot itself (bot.py) should be run separately or managed here.
+    # For simplicity in this plan, we assume bot.py is run as a separate worker,
+    # OR we can integrate the bot runner here if we want a single process.
+    # Given Pipecat's architecture, running bot.py as a standalone worker 
+    # that connects to the room is often easier.
+    
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+```
+
+**Usage**:
+- Run `python server.py` to start the API server.
+- Run `python bot.py --transport livekit` to start the bot.
+- (Optional) Use a `start.sh` script to run both.
+
+---
+
+### Component 4: Frontend Application with LiveKit + RTVI Client
 
 Build a Next.js application that uses LiveKit client SDK with RTVI integration.
 
@@ -475,6 +574,7 @@ export function useLiveKitRoom() {
 ##### 3. TalkingHead Component with LiveKit (`components/TalkingHead.tsx`)
 
 ```typescript
+```typescript
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -487,36 +587,50 @@ export default function TalkingHead() {
   const { room, isConnected } = useLiveKitRoom();
   
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const timingQueueRef = useRef<Map<number, any>>(new Map());
+  const [isThinking, setIsThinking] = useState(false);
+  const timingQueueRef = useRef<any[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number>();
+  const currentTimingRef = useRef<any>(null);
+  const speakStartTimeRef = useRef<number>(0);
   
   // Initialize TalkingHead
   useEffect(() => {
     if (!avatarRef.current || headRef.current) return;
     
-    // TalkingHead class loaded from CDN in layout.tsx
-    if (typeof window !== 'undefined' && (window as any).TalkingHead) {
-      const head = new (window as any).TalkingHead(avatarRef.current, {
-        ttsLang: "en-GB",
-        lipsyncLang: "en",
-      });
-      
-      // Load avatar model
-      head.showAvatar({
-        url: 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb',
-        body: 'F',
-        avatarMood: 'neutral',
-        ttsLang: "en-GB",
-        lipsyncLang: 'en'
-      }).then(() => {
-        console.log('Avatar loaded successfully');
-        headRef.current = head;
-      }).catch((error: any) => {
-        console.error('Failed to load avatar:', error);
-      });
+    const initAvatar = () => {
+        if (typeof window !== 'undefined' && (window as any).TalkingHead) {
+          const head = new (window as any).TalkingHead(avatarRef.current, {
+            ttsLang: "en-GB",
+            lipsyncLang: "en",
+          });
+          
+          // Load avatar model
+          head.showAvatar({
+            url: 'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb',
+            body: 'F',
+            avatarMood: 'neutral',
+            ttsLang: "en-GB",
+            lipsyncLang: 'en'
+          }).then(() => {
+            console.log('Avatar loaded successfully');
+            headRef.current = head;
+          }).catch((error: any) => {
+            console.error('Failed to load avatar:', error);
+          });
+          return true;
+        }
+        return false;
+    };
+
+    if (!initAvatar()) {
+        const interval = setInterval(() => {
+            if (initAvatar()) clearInterval(interval);
+        }, 500);
+        return () => clearInterval(interval);
     }
     
-    // Initialize AudioContext
     audioContextRef.current = new AudioContext({ sampleRate: 24000 });
     
     return () => {
@@ -524,134 +638,116 @@ export default function TalkingHead() {
         headRef.current.deleteAvatar();
         headRef.current = null;
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      if (audioContextRef.current) audioContextRef.current.close();
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, []);
   
-  // Listen for timing data via LiveKit data channel
+  // Animation Loop for Lip Sync
+  useEffect(() => {
+    const animate = () => {
+      if (headRef.current && analyserRef.current) {
+        // 1. Detect Audio Activity
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const energy = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        
+        // 2. Trigger Speaking State
+        if (energy > 10 && !currentTimingRef.current && timingQueueRef.current.length > 0) {
+            // Audio started, pop timing
+            currentTimingRef.current = timingQueueRef.current.shift();
+            speakStartTimeRef.current = Date.now();
+            setIsSpeaking(true);
+            console.log("Speaking started:", currentTimingRef.current.text);
+        } else if (energy < 5 && isSpeaking && currentTimingRef.current) {
+            // INTERRUPT HANDLING: If energy drops significantly while "speaking", 
+            // it might be an interruption. Check if it persists.
+            // For simplicity: if energy is near zero for > 200ms, force stop.
+            // (Implementation detail: would need a counter here)
+        }
+
+        // 3. Update Lips based on Timing
+        if (currentTimingRef.current) {
+            const elapsed = (Date.now() - speakStartTimeRef.current) / 1000; // seconds
+            
+            // Find current word
+            const words = currentTimingRef.current.words;
+            const times = currentTimingRef.current.word_times;
+            const durations = currentTimingRef.current.word_durations;
+            
+            let activeWord = null;
+            for (let i = 0; i < words.length; i++) {
+                if (elapsed >= times[i] && elapsed < (times[i] + durations[i])) {
+                    activeWord = words[i];
+                    break;
+                }
+            }
+            
+            // Check if finished
+            const totalDuration = times[times.length - 1] + durations[durations.length - 1];
+            if (elapsed > totalDuration + 0.5) { // 500ms buffer
+                currentTimingRef.current = null;
+                setIsSpeaking(false);
+                headRef.current.stopSpeaking(); // Reset mouth
+            } else if (activeWord) {
+                // TODO: Map word to viseme if library supports it
+                // For now, just open mouth based on energy if specific viseme API unavailable
+                // headRef.current.speakText(activeWord); // Might be too high level
+            }
+        }
+        
+        // Fallback: Audio-driven lip sync (always active if energy > 0)
+        // Many libraries have a method to update mouth based on audio level
+        // headRef.current.updateMouth(energy); 
+      }
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    
+    animationFrameRef.current = requestAnimationFrame(animate);
+    return () => {
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    }
+  }, []);
+
+  // Handle Incoming Data (Timing & Events)
   useEffect(() => {
     if (!room) return;
-    
-    const handleDataReceived = (
-      payload: Uint8Array,
-      participant: any,
-      kind: DataPacket_Kind
-    ) => {
+    const handleData = (payload: Uint8Array, participant: any, kind: DataPacket_Kind) => {
       if (kind === DataPacket_Kind.RELIABLE) {
         try {
-          const message = JSON.parse(new TextDecoder().decode(payload));
-          
-          if (message.type === 'bot-tts-timing') {
-            console.log('Received timing data:', message);
-            // Store timing with sequence ID for robust sync
-            timingQueueRef.current.set(message.sequence_id, {
-              words: message.words,
-              word_times: message.word_times,
-              word_durations: message.word_durations
-            });
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          if (msg.type === 'bot-tts-timing') {
+            timingQueueRef.current.push(msg);
+          } else if (msg.type === 'bot-llm-started') {
+             setIsThinking(true);
+          } else if (msg.type === 'bot-llm-stopped' || msg.type === 'bot-tts-started') {
+             setIsThinking(false);
           }
-        } catch (error) {
-          console.error('Failed to parse data message:', error);
-        }
+        } catch (e) { console.error(e); }
       }
     };
-    
-    room.on(RoomEvent.DataReceived, handleDataReceived);
-    
-    return () => {
-      room.off(RoomEvent.DataReceived, handleDataReceived);
-    };
+    room.on(RoomEvent.DataReceived, handleData);
+    return () => { room.off(RoomEvent.DataReceived, handleData); };
   }, [room]);
   
-  // Listen for bot audio track and convert to AudioBuffer
+  // Handle Audio Track
   useEffect(() => {
     if (!room || !audioContextRef.current) return;
-    
-    const handleTrackSubscribed = async (
-      track: any,
-      publication: any,
-      participant: any
-    ) => {
-      if (track.kind === Track.Kind.Audio && participant.identity === 'AI Assistant') {
-        console.log('Bot audio track subscribed');
-        
-        try {
-          // Create MediaStream from track
-          const mediaStream = new MediaStream([track.mediaStreamTrack]);
-          const source = audioContextRef.current!.createMediaStreamSource(mediaStream);
-          
-          // Use ScriptProcessorNode to capture audio data
-          const processor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
-          const audioChunks: Float32Array[] = [];
-          let isCapturing = true;
-          
-          processor.onaudioprocess = (e) => {
-            if (isCapturing) {
-              const inputData = e.inputBuffer.getChannelData(0);
-              audioChunks.push(new Float32Array(inputData));
-            }
-          };
-          
-          source.connect(processor);
-          processor.connect(audioContextRef.current!.destination);
-          
-          // Wait for audio to complete (detect silence or use timing data)
-          setTimeout(async () => {
-            isCapturing = false;
-            
-            // Concatenate all chunks
-            const totalLength = audioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
-            const combinedAudio = new Float32Array(totalLength);
-            let offset = 0;
-            for (const chunk of audioChunks) {
-              combinedAudio.set(chunk, offset);
-              offset += chunk.length;
-            }
-            
-            // Create AudioBuffer
-            const audioBuffer = audioContextRef.current!.createBuffer(
-              1,
-              combinedAudio.length,
-              24000
-            );
-            audioBuffer.copyToChannel(combinedAudio, 0);
-            
-            // Get timing data (use most recent for now)
-            const timingData = Array.from(timingQueueRef.current.values()).pop();
-            
-            if (headRef.current && timingData) {
-              // Play with TalkingHead using AudioBuffer
-              await headRef.current.speakAudio({
-                audio: audioBuffer,
-                words: timingData.words,
-                wtimes: timingData.word_times,
-                wdurations: timingData.word_durations
-              });
-              
-              setIsSpeaking(true);
-              
-              // Clear used timing
-              timingQueueRef.current.clear();
-            }
-            
-            // Cleanup
-            processor.disconnect();
-            source.disconnect();
-          }, 3000); // Adjust based on expected response length
-          
-        } catch (error) {
-          console.error('Audio processing error:', error);
-        }
+    const handleTrack = (track: any, pub: any, p: any) => {
+      if (track.kind === Track.Kind.Audio && p.identity === 'AI Assistant') {
+        const stream = new MediaStream([track.mediaStreamTrack]);
+        const source = audioContextRef.current!.createMediaStreamSource(stream);
+        const analyser = audioContextRef.current!.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        // Note: We do NOT connect to destination here to avoid double audio 
+        // if LiveKit's <AudioTrack> is used elsewhere. 
+        // If not, uncomment: analyser.connect(audioContextRef.current!.destination);
+        analyserRef.current = analyser;
       }
     };
-    
-    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-    
-    return () => {
-      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-    };
+    room.on(RoomEvent.TrackSubscribed, handleTrack);
+    return () => { room.off(RoomEvent.TrackSubscribed, handleTrack); };
   }, [room]);
   
   return (
@@ -662,6 +758,11 @@ export default function TalkingHead() {
           Speaking...
         </div>
       )}
+      {isThinking && (
+        <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded animate-pulse">
+          Thinking...
+        </div>
+      )}
     </div>
   );
 }
@@ -669,7 +770,7 @@ export default function TalkingHead() {
 
 ---
 
-### Component 4: Dependencies & Configuration
+### Component 5: Dependencies & Configuration
 
 #### [MODIFY] [client/package.json](file:///media/limcheekin/My%20Passport/ws/py/pipechat-voice-agent/client/package.json)
 
@@ -750,7 +851,7 @@ TOKEN_SERVER_API_KEY="your_token_server_api_key"
 
 ---
 
-### Component 5: Additional Frontend Setup
+### Component 6: Additional Frontend Setup
 
 #### [NEW] [client/src/app/layout.tsx](file:///media/limcheekin/My%20Passport/ws/py/pipechat-voice-agent/client/src/app/layout.tsx)
 
@@ -786,22 +887,14 @@ export default function RootLayout({
 
 ---
 
-### Component 6: Docker Support
+### Component 7: Docker Support
 
 #### [MODIFY] [Dockerfile](file:///media/limcheekin/My%20Passport/ws/py/pipechat-voice-agent/Dockerfile)
 
 **Multi-stage build for frontend + backend**:
 
 ```dockerfile
-# Stage 1: Build Next.js frontend
-FROM node:20-alpine AS frontend-builder
-WORKDIR /app/client
-COPY client/package*.json ./
-RUN npm install
-COPY client/ ./
-RUN npm run build
-
-# Stage 2: Python backend
+# Python backend only
 FROM python:3.10-slim
 WORKDIR /app
 
@@ -813,16 +906,15 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 
 # Copy backend code
-COPY bot.py custom_tts.py tts_with_timing_processor.py ./
+COPY bot.py custom_tts.py tts_with_timing_processor.py server.py ./
 
-# Copy built frontend (serve via nginx or Python)
-COPY --from=frontend-builder /app/client/.next/standalone ./client-dist
+# Create start script
+RUN echo '#!/bin/bash\nuv run server.py & uv run bot.py --transport livekit' > start.sh && chmod +x start.sh
 
 # Expose ports
 EXPOSE 7860
-EXPOSE 3000
 
-CMD ["uv", "run", "bot.py"]
+CMD ["./start.sh"]
 ```
 
 ---
@@ -864,8 +956,8 @@ CMD ["uv", "run", "bot.py"]
    LIVEKIT_ROOM_NAME="avatar-demo"
    
    # Frontend client/.env.local
-   NEXT_PUBLIC_TOKEN_SERVER_URL="https://api.yourdomain.com/token"
-   NEXT_PUBLIC_TOKEN_SERVER_API_KEY="your_token_server_api_key"
+   NEXT_PUBLIC_TOKEN_SERVER_URL="http://localhost:7860/token"
+   # NEXT_PUBLIC_TOKEN_SERVER_API_KEY="your_token_server_api_key" # Not needed for local dev if server.py doesn't check it
    ```
 
 4. **Start backend**:
@@ -1030,42 +1122,15 @@ sequenceDiagram
 
 ### Audio Synchronization Strategy
 
-**Challenge**: Audio arrives via WebRTC audio track, timing via data channel (different streams)
+**Challenge**: Audio arrives via WebRTC audio track (continuous stream), timing via data channel (discrete events).
 
 **Solution**:
-1. Tag timing events with sequence ID
-2. Match audio chunks to timing by sequence
-3. Queue audio if timing not yet arrived (max 100ms wait)
-4. Fall back to basic lip-sync if timing lost
+1. **Real-time Analysis**: Use Web Audio API `AnalyserNode` to monitor the incoming audio track's energy levels in real-time.
+2. **Event Queue**: Buffer incoming `bot-tts-timing` events.
+3. **Trigger**: When audio energy exceeds a threshold (silence -> speech transition) AND a timing event is available, trigger the lip-sync animation.
+4. **Animation**: Drive the avatar's mouth movements based on the `word_times` from the timing event, synchronized to the detected start time.
 
-```typescript
-class AudioTimingSync {
-  private timingQueue: Map<number, TimingData> = new Map();
-  private audioQueue: Map<number, AudioBuffer> = new Map();
-  
-  async onTiming(seq: number, timing: TimingData) {
-    this.timingQueue.set(seq, timing);
-    await this.trySync(seq);
-  }
-  
-  async onAudio(seq: number, audio: AudioBuffer) {
-    this.audioQueue.set(seq, audio);
-    await this.trySync(seq);
-  }
-  
-  async trySync(seq: number) {
-    const timing = this.timingQueue.get(seq);
-    const audio = this.audioQueue.get(seq);
-    
-    if (timing && audio) {
-      // Both available, play now
-      this.talkingHead.speakAudio({ audio, ...timing });
-      this.timingQueue.delete(seq);
-      this.audioQueue.delete(seq);
-    }
-  }
-}
-```
+This approach ensures **low latency** (no buffering of full sentences) and robust synchronization even with network jitter.
 
 ---
 
