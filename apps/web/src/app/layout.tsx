@@ -26,6 +26,25 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="en" suppressHydrationWarning>
+			<head>
+				{/* Load TalkingHead.js from CDN */}
+				<script
+					src="https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.4/modules/talkinghead.mjs"
+					type="module"
+					async
+				/>
+				<script
+					type="importmap"
+					dangerouslySetInnerHTML={{
+						__html: JSON.stringify({
+							imports: {
+								"three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+								"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+							}
+						})
+					}}
+				/>
+			</head>
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
@@ -39,3 +58,4 @@ export default function RootLayout({
 		</html>
 	);
 }
+
